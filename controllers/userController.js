@@ -1,132 +1,154 @@
-const User = require('../model/User')
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcrypt');
+const User = require("../models/User");
+const jwt = require("jsonwebtoken");
+const bcrypt = require("bcrypt");
 
-const registerUser = async(req, res)=>{
-    const {username, password} = req.body;
-    //validate username and password
-    if(!username || !password){
+// Secret key for JWT (Use environment variables in production)
+const JWT_SECRET = process.env.JWT_SECRET || "FVHJAFJHSFVBSFBSSFJSF";
+
+// Register User
+const registerUser = async (req, res) => {
+    const { name, email, password } = req.body;
+
+    // Validate required fields
+    if (!name || !email || !password) {
         return res.status(400).json({
-            error: "Please Insert username and password"
-        })
+            error: "Please provide name, email, and password",
+        });
     }
-    try{
-        const checkExistingUser = await User.findOne({where: {username}})
-        if(checkExistingUser){
-        
+
+    try {
+        // Check if email already exists
+        const existingUser = await User.findOne({ where: { email } });
+        if (existingUser) {
             return res.status(400).json({
-                error: "New user required"
-            })
-           
+                error: "Email is already registered. Please login.",
+            });
         }
-        const saltRound = 10;
-        const hashpassword = await bcrypt.hash(password, saltRound)
 
-        const newUser = await User.create({username, password: hashpassword});
-        res.status(200).json({message: "Registartion Successful....."});
+        // Hash the password
+        const saltRounds = 10;
+        const hashedPassword = await bcrypt.hash(password, saltRounds);
 
+        // Create new user
+        const newUser = await User.create({ name, email, password: hashedPassword });
+
+        return res.status(201).json({ message: "Registration successful", user: newUser });
+    } catch (error) {
+        console.error("Registration error:", error);
+        return res.status(500).json({ error: "Something went wrong during registration" });
     }
-    catch(error){
-        console.log(error)
-        res.status(500).json({error: "Something went Wrong"});
-    }
+};
+// Login User
+const loginUser = async (req, res) => {
+    const { email, password } = req.body;
 
-}
-
-const loginUser = async(req, res) =>{
-    const {username, password} = req.body;
-     //validate username and password
-    if(!username || !password){
+    // Validate required fields
+    if (!email || !password) {
         return res.status(400).json({
-            error: "Please Insert username and password"
-        })
+            error: "Please provide email and password",
+        });
     }
-    try{
-        const user = await User.findOne({where: {username}})
-        if(!user){
+
+    try {
+        // Find the user by email
+        const user = await User.findOne({ where: { email } });
+        if (!user) {
             return res.status(400).json({
-                error: "New user required"
-            })
+                error: "User does not exist. Please register first.",
+            });
         }
-        const isMatch = await bcrypt.compare(password, user.password)
-        if(!isMatch){
+
+        // Compare password
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
             return res.status(400).json({
-                error: "Insert proper password!!!!"
-            })
+                error: "Invalid password. Please try again.",
+            });
         }
+
+        // Generate JWT Token
         const token = jwt.sign(
-            {id: user.username, username: user.username},
-            process.env.JWT_SECRET || 'FVHJAFJHSFVBSFBSSFJSF',
-            {expiresIn: '24h'}
+            { user_id: user.id, name: user.name, email: user.email },
+            JWT_SECRET,
+            { expiresIn: "24h" }
+        );
 
-        )
-        res.status(200).json({message: "Successfully Logged in", token},
-            
+        // ✅ Return `userId` along with the token
+        return res.status(200).json({ 
+            message: "Successfully logged in", 
+            token, 
+            userId: user.id // ✅ Send user ID to frontend 
+        });
 
-        )
+    } catch (error) {
+        console.error("Login error:", error);
+        return res.status(500).json({ error: "Something went wrong during login" });
     }
-    catch(error){
-        res.status(500).json({error: "Something went Wrong"});
-        console.log(error)
-    
+};
+
+
+// Get All Users (Admin or testing purpose)
+const getUsers = async (req, res) => {
+    try {
+        const users = await User.findAll({
+            attributes: { exclude: ["password"] }, // Exclude passwords for security
+        });
+        res.status(200).json(users);
+    } catch (error) {
+        console.error("Fetch users error:", error);
+        res.status(500).json({ error: "Failed to fetch users" });
     }
+};
 
-}
-// const getUser = async(req, res)=>{
+// Update User Profile
+const updateProfile = async (req, res) => {
+    const { name, email, password } = req.body;
+    const userId = req.user.user_id; // Assuming user_id is extracted from JWT middleware
 
-//     try{
-//         const tests = await User.findAll();
-//         res.status(200).json(tests);
+    try {
+        // Find the user
+        const user = await User.findByPk(userId);
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
 
-//     }
-//     catch(error){
-//         res.status(500).json({error: "Failed to Load"})
-//     }
-// }
+        // Update fields if provided
+        if (name) user.name = name;
+        if (email) user.email = email;
+        if (password) {
+            const saltRounds = 10;
+            user.password = await bcrypt.hash(password, saltRounds);
+        }
 
-// const createUser = async(req, res)=>{
-    
-//     try{
-        
-// const {username, password} = req.body;
+        await user.save(); // Save updates
 
-// //Hash the password
-// const newtest = await User.create({username, password})
+        return res.status(200).json({ message: "Profile updated successfully", user });
+    } catch (error) {
+        console.error("Profile update error:", error);
+        return res.status(500).json({ error: "Failed to update profile" });
+    }
+};
 
-// res.status(200).json(newtest);
-//     }
-//     catch(error){
-//         res.status(500).json({error: "Failed to Load"})
-//         console.log(error)
-//     }
+// Get User By ID
+const getUserById = async (req, res) => {
+    const { id } = req.params; // Extract user ID from request params
 
-// }
+    try {
+        // Find user by ID
+        const user = await User.findByPk(id, {
+            attributes: { exclude: ["password"] }, // Exclude password for security
+        });
 
-// const updateUser = async(req, res)=>{
-//     try {
-//         const user = await User.findByPk(req.params.id);
-//         if (!user) {
-//             return res.status(404).json({ message: 'User not found' });
-//         }
-//         await user.update(req.body);
-//         res.json(user);
-//     } catch (err) {
-//         res.status(400).json({ error: err.message });
-//     }
-// }
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
 
-// const deleteUser = async(req, res)=>{
-//     try {
-//         const user = await User.findByPk(req.params.id);
-//         if (!user) {
-//             return res.status(404).json({ message: 'User not found' });
-//         }
-//         await user.destroy();
-//         res.json({ message: 'User deleted' });
-//     } catch (err) {
-//         res.status(500).json({ error: err.message });
-//     }
-// }
+        return res.status(200).json(user);
+    } catch (error) {
+        console.error("Error fetching user by ID:", error);
+        return res.status(500).json({ error: "Failed to fetch user" });
+    }
+};
 
-// module.exports = {createUser, getUser, deleteUser, updateUser}
-module.exports = {registerUser, loginUser}
+
+module.exports = { registerUser, loginUser, getUsers, updateProfile, getUserById };

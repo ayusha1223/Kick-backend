@@ -1,35 +1,35 @@
-//Initialization
+// Initialization
 const express = require('express');
 const cors = require('cors');
 const bodyParser = require('body-parser');
-const sequelize = require('./database/db');
-const userRoute = require('./routes/userRoute')
-const productRoute = require('./routes/productRoute')
+const sequelize = require('./database/db'); // Import sequelize instance
+const userRoute = require('./routes/userRoute');
+const resumeRoute = require('./routes/resumeRoute');
+require('./models/User'); // Ensure your models are imported
+require('./models/Resume');
 
-//Creating a Server
+// Creating a Server
 const app = express();
 
-//Creating a port
-const PORT = process.env.PORT || 5000
+// Creating a Port
+const PORT = process.env.PORT || 8080;
 
-//Creating a middleware
+// Middleware
 app.use(cors());
 app.use(bodyParser.json());
-app.use(bodyParser.urlencoded({extended: true}));
+app.use(bodyParser.urlencoded({ extended: true }));
 
-
-app.get('/login',(req, res)=>{
-    res.send("Welcome to the web page")
-})
-
-
+// Routes
 app.use('/users', userRoute);
-app.use('/products', productRoute);
+app.use('/resume', resumeRoute);
 
-
-//Running on PORT
-app.listen(PORT, ()=>{
-    console.log(`Server Running on........................ PORT ${PORT}`)
-})
-
-
+// Sync Sequelize Models and Start the Server
+sequelize
+  .sync({ force: false }) // Change force to true ONLY if you want to drop & recreate tables
+  .then(() => {
+    console.log("Database synchronized...");
+    app.listen(PORT, () => {
+      console.log(`Server running on PORT ${PORT}`);
+    });
+  })
+  .catch((err) => console.error("Sequelize sync error:", err));

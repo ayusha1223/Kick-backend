@@ -1,23 +1,21 @@
+require('dotenv').config();
 const { Sequelize } = require("sequelize");
 
-const sequelize = new Sequelize('test_db', 'postgres', 'admin123',{
-
-    host: 'localhost',
+const sequelize = new Sequelize(process.env.DB_NAME, process.env.DB_USER, process.env.DB_PASSWORD, {
+    host: process.env.DB_HOST,
     dialect: 'postgres',
-    port: 5432,
+    port: process.env.DB_PORT,
     logging: false,
 });
 
 async function testConnection() {
-    try{
+    try {
         await sequelize.authenticate();
-        console.log('DB connection successful............................')
+        console.log('DB connection successful............................');
+    } catch (error) {
+        console.error('Unable to connect to the database...............', error);
     }
-    catch(error){
-        console.error('Unable to connect to the database...............', error)
-
-}    
 }
-testConnection()
+testConnection();
 
 module.exports = sequelize;
